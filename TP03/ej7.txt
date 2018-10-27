@@ -1,0 +1,9 @@
+Primero se guarda el canary, antes de comenzar la ejecución del código. Asigna espacio demás para el canary.
+El array se guarda al revés, estando el último elemento más cerca de ebp que el primero.
+
+a) Se asigna espacio en el stack, y verifica el canary.
+b) Cuando lo hicimos con un array entero fue igual que el a), y al guardar un string char[] va guardando los caracteres de a 4 bytes con decimales.
+c) Nos dimos cuenta de que el array se guarda con su última posición más cerca de la dirección de retorno. No hay nada raro.
+d) Nada raro.
+e) Guarda en .comm espacio.
+f) Guarda en .globl y después a casa le asigna el valor hola.

@@ -1,0 +1,23 @@
+Comando de compilación (genera un .s):
+gcc -c arguments.c -m32 -fno-dwarf2-cfi-asm -fno-exceptions -S -fno-asynchronous-unwind-tables -masm=intel
+
+En (a), lo único que sucederá es que al llamarse a foo(), el stack se moverá al menos
+4 posiciones (SUB ESP, 4). Luego la función retornará lo que fuera que estaba en EAX.
+
+En (b) sucede lo mismo pero además hay un MOV DWORD [EBP - 4], 21.
+
+En (c) no se hace SUB ESP, 4. Se guarda en .comm, que es la sección donde se reserva
+espacio para variables que pueden aparecer en más de un .o
+
+El caso (d) es interesante: se guarda en .type numero.<identificador> @object, y en
+.size su tamaño. Luego aparece como un rótulo numero.<identificador>, y debajo .long 21
+
+En (e), como la variable es extern sabe que en algún otro archivo habrá espacio
+reservado para numero, por lo que directamente hará MOV DWORD numero, 10
+
+En el otro archivo de (e) aparece primero en .globl numero, cuando en los otros
+ejemplos aparecía foo aquí.
+Luego aparece el rótulo numero:, seguido de .long 21, y recién por acá se define bar en
+.globl. Finalmente se hace MOV DWORD numero, 30
+
+En (f) lo único que cambia respecto de (e2) es que no aparece .globl numero.

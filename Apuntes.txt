@@ -1,0 +1,431 @@
+CLASE 02
+el microprocesador va alterando los punteros a memoria (u. de segm y de paginación).
+i386: Tiene multitasking (Un procesador corre solo una tarea a la vez.)
+No se ven threads. Thread vs. Proceso lo vemos después (y en S.O.)
+Division e/ kernel- y user space
+tiempo real: dentro de todas las apps q corren, usa prioridades (RTOS: para cosas muy exclusivas
+donde las apps no pueden competir por el procesador y se necesita máxima velocidad).
+Sistema de protección: Maneja, p. ej. Seg. Fault.
+
+Sintaxis INTEL: más cómoda (Mov dest, src). Sintaxis AT&T: mov src, dest;
+
+Mov ax, [100h]  // en 100h está D0. El dest es de 16-bit, por lo que va a 100h y trae 16 bits,
+lo que está en 100h y 101h. Estamos hablando de dirs de memoria dentro del procesador.
+--> [AX] == D012
+No se puede guardar un registro de mayor espacio en uno menor.
+
+Escritura en memoria: lo mismo pero al revés: Mov (102h), eax
+
+Como hay 4 segmentos de pila uno tiene que aclarar cual es. Si no aclaras toma DS.
+
+No se puede hacer Mov [bx], [ax] por que hay un bus de address y uno de datos, y en un instante de tiempo
+no puedo ir a memoria en un instante, y tome 2 addresses.
+
+jnz == jump not zero
+
+parametros (del ppt) ocupa un valor relativo que se va a sumar al valor absoluto que se le asigna en memoria.
+
+Evan's Debugger
+
+Lo de arriba: código. Col. izq: dirección de instrucción.A la dcha: registros. En rojo: los que se modifican.
+Abajo-izq: zona de datos. Abajo-der: pila.
+investigar: segmento (0000000..000) y offset(direcciones).
+En gcc en vez de _start hay que poner main.
+gcc agrega muchísimo código a nuestro programa. Para debuggear conviene linkeditar con el ld.
+
+Vamos a trabajar sobre el modo protegido (seg fault).
+
+CLASE 03 (ONLINE)
+
+Tabla IDT. BIOS == Memoria ROM, pone entradas en la IDT (esta es solo una de sus funciones).
+
+Si hago POP AH, me va a traer sólo 1 byte. 
+El stack pointer baja sólo 1 byte.
+POP EAX --> baja 4 bytes (32-bit).
+Si compilamos en x64 tenemos que usar todos registros
+de x64 si no se pone nada.
+En modo protegido no puedo inicializar la pila en cualquier lado (En i386 no se inicializa manualmente la pila).
+Investigar: run forensics. Volcado de RAM: Permite copiar la RAM completa a un archivo.
+C usa una gran pila compartida por todas las funciones de un programa, para poder pasar parámetros.
+La función 1, antes de llamar a la función 2, pushea al stack la dirección
+de retorno. Luego, al terminar la función 2,
+el ESP debe quedar apuntando a la dir de retorno.
+Backupea ese valor en EBP por las dudas (Base PTR).
+Problema: EBP podría haber estado en uso antes del backup. --> Se pushea.
+Quadword == QWORD
+En x64: C prefiere usar registros, pero si no entran ahí se usa stack como en x86.
+Para buscar los parámetros que le pasan a la función, se usa EBP+0x...
+Armado de Stackframe: guardar EBP anterior y pisarlo para usarlo como backup.
+Los valores de las funciones se retornan por registro.
+No es nada recomendable escribir en lenguaje Assembler desde C.
+Alineamiento de palabra: Lo agrega gcc para ser más performante.(AND ESP,-16)
+MOV EAX,0 y SUB ESP,EAX es incomprensible.
+Investigar: gcc -o (--optimize)
+Código ejemplo: reservó de más para el int al hacer sub ESP,8 en vez de sub ESP,4.
+Stack overflow exploit
+
+CLASE 04
+
+¿Por qué conviene tener el stack contiguo, en vez de que cada función cree su propio stack en otro lado?
+Alineación de palabra: conviene moverse según múltiplos (ej.: de a 4 bytes)
+Por la zona protegida, conviene proteger sólo una zona de memoria, de principio a fin, que proteger muchos
+bloquecitos.
+Al crecer las pilas es más probable que pise otros programas (se vuelve más difícil de mantener).
+Memoria caché: pequeños bloques de mem. contigua de altísima velocidad.
+Ventaja de codear en asm: ninguna. Los que programan malware lo hacen en asm --> menos ctroles de segur.
+Ver: Steve Gibson (grc.com). Codea todo (incl. interfaz gráfica) en asm.
+Cuando se hace PUSH algo, asume que es de 32 bits lo que se pushea (si no se aclara).
+Ver macros leave y enter. Microcódigo de los procesadores: ret tiene internamente un microcódigo (ir a ESP,
+corchetes, ponelo en el Instruction Pointer y hacé pop).
+Leave desarma la pila (MOV ESP, EBP  POP EBP)
+AND 0xfffffff0 --> Mueve al ESP a una posición terminada en 0 para ser más performante al acceder a memoria
+Valor canary: antes de hacer el ret, C llama a una función que hace un chequeo del stack: va a revisar si
+alguien cambió ese canary, para ver si alguien lo pisó. Si es diferente al que puso originalmente
+genera una excepción y te protege que no saltes a una dirección donde uno pueda dejar código compilado.
+Ver: Exploit por Buffer Overflow (Rop)
+La validación de datos es probablemente la vulnerabilidad más severa a nivel mundial.
+
+CLASE 05
+
+Interrupción de teclado == driver del teclado. Se fija qué tecla se tocó, etc.
+Idem interrupción de mouse y todos los otros dispositivos de hardware de la PC.
+Fetch, decode, execute.
+No puede ser interrumpida una instrucción a la mitad (son atómicas).
+Atomicidad == porción de código que corre de principio a fin sin interrupción alguna.
+En un buen OS el driver está en el kernel space. IRET --> volver de k.space a u.space
+Interrupción de hardware: INTR y NMI. INTR: existe un flag, que si se altera se deshabilitan las
+interrupciones de este tipo. Por aquí vienen el teclado y el mouse. Este flag puede ser cambiado también
+por el programador de un driver, para que no lo interrumpan. INTR --> enmascarable.
+RTOS: Real Time OS, versión de linux con funcionalidades Real Time.
+NotMascarableInterrupt: No pueden evitarse. Las usa la fuente eléctrica: tiene sentido que tenga más
+"permisos" que el procesador, para evitar pérdida de datos. También las usa algún sensor de temperatura.
+PIC (8259): Administrador de interrupciones de hardware (INTR solamente). No tiene código. 
+El flag evita que todo lo que entra al PIC interrumpa al programa. El bus de datos sólo pasa quién fue.
+Todo este esquema está estandarizado, es para PCs IBM/AT compatible.
+Direcciones I/O != Direcciones de memoria
+out 20h, Ah ; estoy escribiendo en el PIC
+out 21h, Bh ; idem. Para programarlo se le mandan bytes. No le estoy pasando instrucciones.
+Lo único que hay en 21h es la máscara. En el 20h están las prioridades.
+Cuando la BIOS arranca a la PC, carga el programa default en el PIC.
+Microprocesador procesa instrucciones programables. En el caso del pointer, no puede cambiarse lo que va
+a procesar: son 4 entradas y 4 salidas. Tiene un microcontrolador: hace operaciones mínimas.
+En la PC hay direcciones de memoria que en lugar de tener memoria, hay periféricos.
+Prefiero ver la pantalla como una dir. de memoria que verlo como in/out/in/out y hacer miles de
+operaciones.
+BasicInputOutputSystem: El BIOS empieza a correr. Termina de correr, va al HDD, o a otro boot device,
+levanta el OS a la RAM, e inicia el OS. Cuando arranca la PC carga en la IDT funciones propias.
+Lo único que levanta son los 1eros 512 bytes, y se "lava las manos". lo primero que hay que hacer es
+llamar a la INT 13h, que incluye drivers para HDD, CD, FlashDrive y Network Adapter.
+Los 1ros OSs usaban las rutinas subidas por la BIOS en la IDT, pero hoy en día no (podría haber miles
+de bugs relacionados con estas rutinas, y los que mantienen el OS no podrían arreglarlo).
+Bootloader: vamos a usar grub. Nota: INT está deprecated. Ahora se usa SYSCALL generalmente.
+Las primeras 32 entradas de la IDT son excepciones. Son eventos generados por el propio procesador.
+El OS le indica al procesador, mediante el segment descriptor, qué segmentos de memoria están ocupados.
+APIC == Advanced PIC.
+RTC == Real Time Clock. Hot Plug: permite conectar dispositivos mientras la PC está encendida.
+
+CLASE 06
+
+Tipos de arquitectura:
+* Harvard: 2 buses: uno para memoria de código, otro para memoria de datos, de tal manera que éstos
+ puedan obtenerse en un mismo instante de tiempo. (se usa en algunos celulares, por ejemplo).
+* Von Neumann: 1 bus, para código y datos. Es la utilizada actualmente (más simple == más barato).
+ Chip select determina a dónde va a ir la señal, si al de código o al de datos.
+
+Hay un único BUS que va de la PC a memoria y a los periféricos. Eléctricamente es lo mismo. 
+IP, a dónde apunta al enchufar el procesador a la electricidad? IP --> FFF0h
+
+			mov AX, [200h]
+IP->0100h	mov AX, 0
+Voy a tener un cablecito por cada bit que componga las direcciones de memoria.
+Cada cablecito está rotulado: A0, A1, A2, ..., An-1 (n = cantidad de bits).
+El bit menos significativo va a A0 (en 0100h, el 0 pegado a la h va como A3 A2 A1 A0).
+mov AX, 0 entra por el bus de datos, se decodifica y se ejecuta. Una vez que se ejecuta se incrementa
+el IP (según lo que ocupara la última instrucción ejecutada).
+Mapa de memoria == toda la memoria (ej 16TB) que se puede ver como máximo.
+16 líneas de direcciones --> 2^16 direcciones == 2^10*2^6 (2^10 == K, 2^6 == 64) --> 64K
+2^20 == M, 2^30 == G, 2^40 == T
+8 bits = 1 byte --> 64K == 64KB (en cada dirección hay un byte). Este sería un procesador que soporta
+sólamente 64 KB de RAM.
+Otro ejemplo: Procesador con Bus de Address de 32 líneas y Bus de Datos de 32 líneas.
+--> 2^32 == 2^30*2^2 == 4G (alto del mapa de memoria).
+32 bits == 4 bytes de ancho( Una dirección tiene 8 dígitos), entonces serían 4G * 4 bytes = 16GB.
+Intel: 2^32 * 1 byte --> 4GB RAM
+Memoria ROM
+Siguieron PROM, EPROM y Flash, EEPROM.
+No volátil, de escritura más lenta que en la RAM.
+Las memorias no se alteran mecánicamente. Se está guardando un pedacito de energía (un 0 o un 1), y
+lograron la forma de que la curva de pérdida de energía sea con muy poca pendiente. La duración es de
+aproximadamente 20 años. Leer y volver a escribir vuelve a cargar energéticamente al disco.
+Curva de descarga de un capacitor. Resistencia muy alta, carga muy pequeña.
+
+Memoria RAM
+Las primeras memorias se podía acceder sólo secuencialmente, luego se pudo acceder a direcciones
+particulares. Es volátil. Le sacás la energía y pierde toda la información.
+RAM estática (SRAM): Una memoria estática no necesita refresco, es mucho más rápida. Mientras tenga
+					 energía, no se olvida los datos. Se usa para la caché del procesador, por ej.
+RAM dinámica (DRAM): Necesita refresco, más lenta, menos compleja, más económica. Pierde los
+					 valores a los pocos ms desde que se generó el dato. Antes de que se "olvide"
+					 el dato, se lo lee y se lo vuelve a escribir con la misma información.
+Transferencia es el tiempo que tardan en viajar los bits desde el procesador hacia la memoria (vice versa)
+Por el cable, los electrones viajan a aprox. 2/3*velocidad_de_luz
+La velocidad de transferencia es la misma en SRAM y DRAM. Cambia la latencia (lo que tarda en devolver el
+dato).
+Memoria 1K*8 --> (A9)00 0000 0000(A0) == 000h; 11 1111 1111 == 3FFh;
+Memoria 2K*8 --> (A10)000 0000 0000(A0) == 000h; 111 1111 1111 == 7FFh;
+
+Compuerta NOT
+Todas las instrucciones que tiene el procesador están hechas con compuertas.
+Compuertas es una operación sencilla de Boole (negación), con compuertas negadoras. Lo que recibe a la
+entrada, lo niega a la salida.
+Hay compuertas AND, OR, NOT, NAND, NOR, XOR, BUFFER (Buffer devuelve lo mismo que recibe pero en buen
+estado, ej si viene un 1 con poco voltaje (casi 0), devuelve un buen 1).
+
+Decodificador (Ejemplo: de 3 a 8)
+Decodifica binario a algo que representa el número. Las de salida nunca están todas en 0.
+
+muP: 16 líneas de bus de Address, 8 bus de datos. ROM: 2K*8
+16BA == 2^16 == 2^10*2^6 == 64K de alto; 1 byte de ancho --> el procesador puede ver 64KB.
+Como tengo para manejar 64KB, voy a poder manejar 2KB.
+ROM: 2K * 8 --> 2^1*2^10*8 --> 2^11 * 8; Patitas: A0, A1, A2, ..., A10 por 2^11; D0, D1, ..., D7 por 2K*8;
+RD, CS. Las direcciones 000 a 7FF no tienen nada que ver con las del procesador (0000 - FFFF).
+Patitas del procesador: A0, ..., A15; D0, ..., D7; VCC --> por acá entra la energía. Cuando prendo el
+procesador, se corre la instrucción que está en la dir. a la que apunta IP (aparece en el manual).
+
+CLASE 07
+
+La memoria suele ubicarse como para que el IP apunte al final de la ROM, así dentro de esta hay un JMP
+que lleva al comienzo de las instrucciones. Esto sucede por conveniencia: que el IP apunte al final evita
+cuentas y permite fácilmente ampliar la memoria.
+
+IO/M: Input/Output memory 0 --> Mapa de memoria; 1 --> Mapa de entrada/salida
+ARM no tiene mapa de dispositivos.
+
+CLASE 08
+
+IO/M == IO(notM); 0 --> Mapa de mem; 1 --> Mapa de IO
+Sólo va a valer 1 si uso IN o OUT. El mapa IO es de 16-bit.
+Algunos procesadores tienen una patita R/W (0-->R; 1-->W). Otros tienen dos patitas, una R y una W (Intel).
+Nosotros vamos a utilizar sólo decodificación completa.
+E/S aislada: IN y OUT.
+Mapeo en memoria: colocar un periférico en el mapa de memoria. Desventaja: pierdo direcciones del mapa.
+DMA --> Después del parcial.
+El fabricante de cada dispositivo define con qué combinación de 0 y 1 se accede a cada uno
+de sus registros, no hay un estándar. 
+Cada dispositivo se accede como una dirección de memoria. Ej.: IN AL, 60h ;Teclado
+Un dispositivo puede estar parte en memoria y parte en el mapa de IO.
+Cuando trabajamos en IO, no existen los corchetes: Hay que hacer IN, tomar el dato,
+trabajarlo y devolvérselo al dispositivo.
+Video modo texto (sin gráficos), si le pongo 43 (está mapeado en memoria) me imprime 'C' en pantalla.
+Para usar, por ejemplo, FullHD, le hablo a determinados puertos de la placa y me lo configura.
+Ahora, tendría que pasarle pixel por pixel para que lo imprima en FHD.
+Video en modo texto: 2 p. de mem, 1 caracter en pantalla (caracter mas atrib.).
+PPT nro. 5 (no entra al parcial):
+Hay 2 familias de circuitos integrados (procesadores): TTL y CMOS. 
+Velocidad de conmutación: Mientras que sube el voltaje de 0 a 1 (tarda en realidad pocos ns), no se transmite un 0
+y un 1 a la vez, sino que se tarda un rato en pasar de 0 a 1.
+A mayor pendiente la subida de 0 a 1 --> mayor velocidad del procesador.
+Tiempo de propagación: aparece un valor en la entrada de una compuerta, lo que tarda la compuerta en
+convertir el valor.
+Clock: es un integrado que está en todos los sistemas computacionales.
+Tiene una salida y genera señal de clock: 0, 1, 0, 1, 0, 1, ...
+Esta patita voy a conectarlo a todos los didpositivos: Todos tienen entrada de clock, y
+reciben lo mismo al mismo tiempo. Le marca a todos los dispositivos un ritmo de trabajo. 
+Clock es similar al metrónomo.
+Todo está preparado para que el clock genere una señal máxima que todos los dispositivos puedan seguir.
+Overclocking: que la señal generada por el clock sea mayor que la recomendada.
+/*entonces la duracion de la señal de uno deberia ser mayor al tiempo de propagacion? - SI*/
+Patita EN (Enable): Habilita o deshabilita lo que va a hacer el periférico. Sirve para desactivar el periférico.
+En un procesador de 8 bits hay 8 sumadores encadenados.
+Contador: periférico que recibe de entrada la señal de clock y genera una señal a la salida 
+cuando terminó de contar n señales de la salida de clock. Timer tick es uno de estos;
+nos ayuda a medir el tiempo. Es programable (le puedo pasar n).
+Programmable Interval Timer (PIT): es un integrado que tiene 3 timers y permite programarlo para contar pulsos del clock.
+De los 3 timers, uno ya viene programado para contar hasta 65536. Ahí se genera un pulso cada 55ms. la particularidad es que esta salida va conectada a la IRQ0 del PIC.
+== Hay 1 timer alimentado por el clock que genera un pulso e interrumpe al procesador cada 55ms --> Timer Tick.
+El timer tick es fundamental: A cada señal de este timer el procesador interrumpe su ejecución y evito que un programa no sea
+interrumpido nunca y que no me libere el procesador. Se puede cambiar lo de 55ms.
+El timer tick, al interrumpir, se fija si hay algún proceso con mayor prioridad para darle ejecución.
+La rutina scheduler es la que hace todo esto.
+SO por lotes: primero corre A hasta su fin, después corre B hasta su fin, por ahí viene D y se cuelga (while(1)).
+Se traba la máquina, nunca se correrá la rutina scheduler. != SO de tiempo real (este puede llegar a manejar esto).
+El de tiempo real evita que el scheduler esté por encima de un proceso particular.
+RTC: cuenta horas, minutos y segundos. Se alimenta con una pila, cuenta día, fecha, año, etc.
+También guarda la Password de la BIOS.
+Teclado: Cuando aprieto una tecla se genera una interrupción en el IRQ1 del tick. Cuando la suelto también.
+Mientras mantengo se genera MAKE CODE. Cuando se suelta se genera BREAK CODE. Lo hicieron así para hacer combinación de teclas.
+Posición de la tecla en el teclado (fila y columna) es lo que se usa para detectar qué tecla es. El driver del teclado se
+encarga de convertir él 10h en una 'q'.
+Buffer: puntero al próximo char y al último char. El teclado va generando interrupciones y llenando el buffer. 
+Yo decido que guardar en el buffer: si el scan code, el ascii, etc.
+También puedo tener flags de las teclas presionadas como Shift, etc.
+HDD magnético: El disco tiene info arriba y abajo en el disco.
+Cuando guardo un archivo, se guarda en cada plato, en la misma posición en c/u. Es temporalmente costoso mover el brazo.
+Hoy los discos teiene un sistema denominado Autopark: detectan el movimiento que estoy haciendo y logra que no golpee al plato.
+Particiones: divisiones lógicas del disco.
+MBR (512B) levanta el BIOS a memoria cuando arranca la PC. MBR: Boot code y Partition table.
+Cada OS pisa el MBR y pone su propio MBR.
+Volume Boot Record: Cuando instalo linux, si ya tenía Windows, copia el MBR de windows al VBR.
+Stage 2: está en el HDD. Levanta kernel en memoria.
+DMA: Permite accesos a memoria independientes del procesador (de mem a mem o de perif a mem).
+Accede a memoria con permiso del CPU, y usa el bus de address.
+
+CLASE 09 - Intel Galileo
+
+EEPROM 11KB; Max 2GB RAM; 32-bit para instrucciones BA 16-bit; Cache 16KB; ROM 8MB; microSD;
+Sketch == script Arduino; Galileo es compatible con Arduino.
+OS default ó flashear en una memoria externa otro. Galileo: Single-Board Computer que emula un Arduino.
+Lenguaje Arduino es similar a C++
+Sketch: tiene 2 partes:
+*Setup (Se ejecuta solo una vez)
+*Loop (Se ejecuta siempre)
+Se conecta el USB al USB client, especificar a qué puerta está conectada la placa, luego mandar
+el programa a la placa. la BIOS resetea la placa y carga el programa.
+Arriba: pines digitales; abajo: pines analógicos.
+Un lado del PIN a una resistencia y a la salida de 13, el otro a GND.
+Conectar al USB recién cuando se prenda la luz.
+DIY == DoItYourself (Producción local). Buzzword == Palabras técnicas que aparecen en el mundo de los
+negocios (IoT, Big Data, etc)
+Embedded: dispositivos computados que no son de uso general.
+SoC == System on a Chip; Scada: tableros y paneles de control. Smart Grid == grilla eléctrica
+
+CLASE 10
+
+Time slot: Pedacito de tiempo que corre la tarea 1. (tiempo e/ comienzo de ejec. de tarea e interrupción
+del timer tick).
+El timer tick genera una interrupción en el procesador (IRQ0) cada ~15ms. Cuando se interrumpe el
+procesador corre una rutina de atención a interrupción (rutina == scheduler, parte del OS).
+Va a la siguiente tarea a ejecutar. Antes de interrumpir, es necesario guardar los valores existentes en
+los registros, el IP, etc. Los mete en una estructura y los guarda en una parte de la RAM (Denominada
+contexto de tarea 1). De esto se encarga el scheduler.
+Al crearse un proceso, el OS lo sube a RAM. En el 1er time slot no hay contexto de tarea -->
+Ver Hilos de ejecución.
+Si el scheduler se demora tanto que se llega a otra interrupción: En realidad, el scheduler deshabilita
+las interrupciones. El OS es una tarea más. CLI es una instrucción privilegiada (anillo 0).
+Unidad de segmentación y unidad de paginación: 2 formas de organizar la RAM para proteger a los procesos.
+Lo que programo pasa por la u. de seg. donde se revisa el puntero, luego pasa por la u. de paginación, y
+ahí se accede a la memoria. Estas unidades van a cambiar los punteros con los que yo trabaje.
+U. de seg y u. de pag: tablas de conversión de punteros. Modo real: lo que programo pasa por el bus de
+address sin ser alterado (Ya no existe).
+Modo FLAT: crear 2 tablas de entrada definiendo a toda la memoria como que toda la mem. tiene el mismo
+permiso --> no va a fallar nunca.
+Segmento y offset --> Dirección lógica. Segmento == selector. TI == Table Indicator.
+
+Segmentación: se divide la memoria en segmentos únicos para cada proceso. Dentro de ellos corre la
+respectiva tarea. En otra parte de la memoria se ubica la Tabla de descriptores, con punteros a los
+comienzos de cada uno de los segmentos anteriores (Base Address), sus límites (final del bloque), y
+permisos.
+CPL == Current Privilege Level (tarea que está corriendo en ese momento).
+RPL == Request Privilege Level (zona de memoria a donde quiero ir).
+DPL == Descriptor Privilege Level
+Cuando esto pasa, genera una excepción de tipo 13 (Seg. fault).
+Cuando una tarea se corre una primera vez, el OS le asigna memoria, contexto, y ahí se llena en la tabla
+de descriptores los datos necesarios, y finalmente comienza la ejecución con un jmp.
+La tabla de descriptores se describe a sí misma, asignándose los permisos más altos posibles. 
+P (Presente): El segmeto tal no está. Al estar casi toda la RAM en uso, se puede bajar a disco el segmento
+de un proceso, y poner otro en su lugar. Si se requiere de nuevo, tengo que levantarlo de la ROM y se lo
+ubica en otro lugar. --> Memoria virtual.
+DS = 20h: posición 20 del Data Segment.  LDT casi no se usa.
+Verde: RPL; Rojo: GDT/LDT; 
+En modo protegido, en la IDT, no hay un puntero directamente a memoria; Hay un puntero a la tabla de 
+descriptores que describe la zona de memoria donde está mi rutina de atención. El Base Address sale de
+la tabla.
+Tenemos que reprogramar el PIC; El timer tick viene a la entrada 8, pero en las primeras 32 están las
+excepciones. IRQ0 --> IDT 8h; IRQ1 --> IDT 9h; Hay que cambiarla a 33, o a 40, o a 70, etc.
+Task State Segment se dejó de utilizar por ser demasiado poco complejo; el contexto de tarea comienza a
+agrandarse.
+
+CLASE 11
+
+No solo se chequean permisos de CPL respecto de el DPL de lo apuntado por DS; También se analiza el del
+segmento del offset (sucede por si mando DS:[nroMayorAlLimiteDelSeg]) --> cae en otro segmento).
+offset: dirección de memoria relativa al inicio del segmento. (valor 8: GDT).
+Trap gate descriptor == Interrupt gate descr., solo cambia un bit que es 1 en trap gate.
+cli: deshabilita todas las entradas de interrupciones. Es una instrucción privilegiada (las corre solo
+un segmento de memoria que cumpla con los privilegios en el IOPL).
+
+Memoria virtual
+mapping: a los programas que están corriendo les doy pedazos de mi mapa de memoria pero hacer el mapeo de
+quienes van a estar realmente en memoria física y quienes no. Convertir direcciones virtuales a direcciones reales.
+Unidad de segmentación no alteraba las direcciones.
+memtest86: escribe byte a byte en la memoria y luego verifica que esté correcto.
+El OS puede modificar los punteros que yo haya asgnado, y, aunque los míos los vea contiguos, físicamente
+pueden no estar contiguos.
+
+CLASE 12
+
+CR3 (Control Register 3) --> puntero que apunta al directorio de páginas (está toda la estructura de 
+paginación). Dirección lineal : sale de la unidad de segmentación.
+|Directorio|Tabla de página|Página|
+Al programador del OS le sirve la paginación para crear memoria virtual. El programador va a asociar las
+páginas virtuales a páginas reales. Todas las páginas virtuales pueden ser físicas. Dependiendo de cuantas
+tenga pueden ser todas físicas.
+Cuando cambio el tamaño de la página cambia el offset.
+Si tengo 4G de mem física (2^32 dirdemem) y las páginas son de 4K, puedo tener 2^20 páginas. Si, en cambio
+fueran de 16K, serían 2^18 páginas. Intel --> 2^20 páginas (en 1985 4K era el tamaño promedio de un progr)
+En DIR están los primeros 10 bits del índice de la página y en PAGE están los otros 10.
+Es más fácil liberar sólo 10 entradas de DIR, que muchas páginas sueltas.
+"Capítulo" == entrada en DIR, "Páginas" == tabla.
+Intel: sólo 1 directorio. 2^10 entradas en él. Cada una de esas apunta a una tabla de páginas de 2^10 ent.
+Cada entrada en la tabla de páginas tiene una página. Le sumo el offset a lo apuntado por la entrada de
+una tabla y obtengo el byte exacto al que quería apuntar. Cada entrada en la tabla tiene 4 bytes.
+Sí o sí el directorio y las tablas de páginas tienen que estar en memoria física. El valor de CR3 no puede
+ser cualquier cosa. CR3 debe existir en la RAM y en el que ponga la tabla de página también.
+
+CLASE 13
+
+ARM crea ARM1 en 1985. No fabrica procesadores. MIPS == Millones de Instrucciones Por Segundo.
+Buena relación MIPS/Watt. El procesador tiene extensiones que vienen en el hardware por cada procesador.
+Uno busca el procesador que se adecúa a las necesidades que uno busca.
+Modo IRQ, abort, undefined, User y system.
+Instrucciones tienen tamaño fijo. Se ejecutan en un ciclo de clock.
+A las instrucciones más pequeñas se les appendea 0s para que ocupen 4 bytes.
+Todas comparten el set de instrucciones y son retrocompatibles.
+Uno puede setear el tamaño de la palabra al inicio.
+ARM ya viene con todo: RAM, ROM para bootear, puerto IO.
+Microcontroladores: integrados que ejecutan una serie de instrucciones.
+SoC: procesador, memorias, osciladores, conversores e interfaces.
+Todos los periféricos están mapeados en memoria (No hay mapa IO).
+Pipeline: Lo tienen todos los procesadores. Una instrucción de salto provoca que se vacíe el pipeline.
+	1ra fase: Fetch (la instr pasa por el Bus de Address y tarda t0).
+	2da fase: Decode (la instr pasa por el Bus de datos y tarda t1).
+	3ra fase: Execute (la instr se ejecuta y tarda t2).
+t0 >>> t2 > t1 (a veces t2 también cambia mucho, dependiendo de la operación). t0 implica acceso a memoria
+
+Trabajo paralelo --> Pipeline. Dentro de una sola instrucción diferentes procesos para paralelizar.
+
+F D E mov ax, 0
+  F D add ax, bx
+    F mov cx, 4
+      sub bx, cx
+      inc ax
+    E mov [ax], bx ; requiere el uso del bus de datos por el [ax], por lo que se va a overlappear con
+                   ; el fetch de la siguiente instrucción, que tal vez justo iba a usar el bus de address
+                   ; para su decodificación. Como la programación es secuencial, se espera a terminar la
+                   ; ejecución (pensar que la siguiente podría modificar un registro anterior).
+
+ Esto puede solucionarse con la arquitectura Harvard en vez de Von Neumann. El tiempo muerto es muchísimo
+ menor en Harvard que en Von Neumann.
+
+ 	 mov ax, 0
+ 	 cmp bx, 3
+   E je end
+ F D sub bx, cx ; todo esto es tiempo perdido porque el jmp vacía el pipeline
+   F inc ax     ; esto también
+
+Branch prediction: analiza el código y detecta si va a hacer un jmp o no, así sabe si puede evitar los
+fetch que siguen al jmp. Estadísticamente hay tantos jmp que si se predice el salto se consigue mayor
+eficiencia.
+
+ARM: casi todas las instrucciones son condicionales. Ej: cmp R1, R2; Addeq R1, #1; Subne R1, #1
+Hay unos bits de condición que van adjuntos a otros bits de la instrucción. Ver PPT.
+Por ejemplo, 0000 es equals. Una instrucción que comience así solo se ejecutará si el flag zero está en 1.
+
+THUMB: Set alternativo de instrucciones, de 16 bits.
+El procesador permite usar 2 sets de instrucciones: el clásico de 32 bits y el Thumb.
+Ahorrás espacio con tu código. Desventaja: hay que descomprimir instrucciones, que en realidad son de
+32 bits, y luego se ejecutan. Ventaja espacial, desventaja temporal.
+
+Jazelle: Feature que permite ejecutar bytecode de Java directamente en hardware.
+
+Hoy en día el pipeline es de 5 niveles. Arquitectura Harvard.
